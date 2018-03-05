@@ -1,7 +1,13 @@
-pragma solidity ^0.4.18;
+pragma solidity ^0.4.20;
 import './Ownable.sol';
 import './SafeMath.sol';
 
+/*
+ * @title Birdy - the incentivised birdfeeder  
+ * @dev This contract is handled by the arduino powered birdfeeder, the users & us as admins
+ * @author Pavel Kral - project author
+ * @author Josef Jelacic - solidity dev
+ */
 contract Birdy is Ownable{
     using SafeMath for uint256;
 
@@ -16,18 +22,18 @@ contract Birdy is Ownable{
     uint256 public weiDonated;
     uint256 public payPerBird;
     
-
+    // Breeders related mapping
     mapping (bytes32 => address) uids;
     mapping (address => uint256) streak;
-
     // Donations related mappings
     mapping (address => uint256) donated;
     mapping (uint256 => address) donorsList;
 
-    // Event declarations
+    /*
+     * SECTION >>>> EVENTS
+     */
     event newDonor (address indexed donor);
     event newDonation (address indexed donor, uint256 weiDonated);
-
     event birdsUpdated(uint256 newBirds);
     event paidOut (address indexed breeder, uint256 amount);
     event breederChanged (address indexed breeder);
@@ -36,23 +42,29 @@ contract Birdy is Ownable{
     event feederChanged (address feeder);
     event minTimeChanged (uint256 minTime); 
 
+    /*
+     * @dev Modifier enabling function calls only to the feeder device
+     */
     modifier onlyFeeder() {
         require(msg.sender == feeder);
         _;
     }
 
-    //    function Birdy(address _feeder, uint256 _payPerBird) {
-    //        feeder = _feeder;
-    //        payPerBird = _payPerBird;
-    //    }
-
-    function Birdy() {
+    /*
+     * @dev Constructor setting up the feeder, price per visiting bird ...
+     * @dev ... & minimal time interval to change a breeder 
+     */
+    function Birdy() public {
         feeder = msg.sender;
         payPerBird = 100 wei;
         minTime = 60; 
     }
 
-    // Donation
+    
+    /*
+     * @dev Fallback function which servers as a donation point 
+     * (simply send some ether to be remebered as a hero!)
+     */
     function () payable public {
         require(msg.value > 0);
         if (donated[tx.origin] == 0) {
@@ -65,13 +77,19 @@ contract Birdy is Ownable{
         newDonation(tx.origin, msg.value);
     }
 
+    /*
+     * @dev Function which changes the current breeder and pays out the last known.
+     * @dev It doesn't allow the same person to re-ender & a minimal time check has to be passed.
+     * @dev Is called by the birdfeeder directly .
+     * @param bytes32 _uid will be loaded from your NFC device 
+     */
     function changeBreeder(bytes32 _uid) public onlyFeeder {
         uint256 timeDiff = now - timeChanged;
         address newBreeder = uids[_uid];
 
         require (timeDiff >= minTime);
         require (breeder != newBreeder);
-        require (newBreeder != 0);
+        require (newBreeder != address(0));
 
         payOut();
 
@@ -79,45 +97,94 @@ contract Birdy is Ownable{
         breeder = newBreeder;
         timeChanged = now;
 
-        breederChanged(msg.sender);
+        breederChanged(newBreeder);
     }
 
+    /*
+     * @dev Function which increases the number of birds that visited the feeder.
+     * @dev Is called by the birdfeeder periodically.
+     * @param uint256 birds - the number of birds visiting the feeder withing a given period
+     */
     function iterateBirds(uint256 birds) public onlyFeeder {
         birdsSince += birds;
         birdsTotal += birds;
         birdsUpdated(birds);
     }
 
+    /*
+     * @dev Function which pays out the breeder per each bird or the whole balance. 
+     * @dev Is called by the birdfeeder periodically or when the breeder change is initiated. 
+     */
     function payOut() public onlyFeeder {
         uint256 payout = birdsSince.mul(payPerBird);
+        uint256 balance = this.balance; 
+        
         birdsSince = 0;
-
-        breeder.transfer(payout);
-        // TODO: "Error" handling
-
+        
+        if (balance >= payout) {
+            breeder.transfer(payout);
+        } else {
+            breeder.tranfer(balance);
+        }
+        
         paidOut(breeder, payout);
     }
 
-    // Settings
+    /*
+     * @dev Function enabling UID (breeder) registration for future interaction with the breeder.
+     * @dev Anyone can call it for a non-stored UID
+     * @param bytes32 _uid of the NFC device
+     * @param address _address of the UID owner
+     */
     function registerUID(bytes32 _uid, address _address) public {
         require(uids[_uid] == address(0));
         uids[_uid] = _address;
         uidRegistered(_uid, _address);
     }
     
+    /*
+     * SECTION >>>> SETTINGS
+     */
+     
+    /*
+     * @dev Function to change the default value per visiting bird to be paid out.
+     * @dev Can only be called by the contract owner (us).
+     * @param uint256 _new - the new amount of wei to be paid for each bird
+     */
     function changePayout(uint256 _new) public onlyOwner {
         payPerBird = _new;
         payoutChanged(_new);
     }
 
+    /*
+     * @dev Function to change address associated with the birdfeeder. 
+     * @dev Can only be called by the contract owner (us).
+     * @param address _new - the new address of used by the birdfeeder 
+     */
     function changeFeeder(address _new) public onlyOwner {
         feeder = _new;
         feederChanged(_new);
     }
     
+    /*
+     * @dev Function to change the minimal time duration needed between breeder changes. 
+     * @dev Can only be called by the contract owner (us)
+     * @param uint256 _minTime needed between breeder changes
+     */
     function changeMinTime(uint256 _minTime) public onlyOwner {
         minTime = _minTime;
         minTimeChanged(minTime);
+    }
+    
+    /*
+     * @dev Function to change address for any UID (new or registered).
+     * @dev Can only be called by the contract owner (us) in special cases. 
+     * @param bytes32 _uid of the NFC device
+     * @param address _address of the UID owner 
+     */
+    function changeUIDOwner(bytes32 _uid, address _address) public onlyOwner {
+        uids[_uid] = _address;
+        uidRegistered(_uid, _address);
     }
 }
 

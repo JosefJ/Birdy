@@ -1,6 +1,4 @@
-
 TX costs:
-
 ETH 2Gwei / 20 Gwei / 60 Gwei
 
 UID register:
