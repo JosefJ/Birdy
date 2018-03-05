@@ -9,11 +9,13 @@ contract Birdy is Ownable{
     address public feeder;
     address public breeder;
     uint256 public timeChanged; //TODO: choose smaller uint type
+    uint256 public minTime; 
     uint256 public birdsSince;
     uint256 public birdsTotal;
     uint256 public donorsCounter;
     uint256 public weiDonated;
     uint256 public payPerBird;
+    
 
     mapping (bytes32 => address) uids;
     mapping (address => uint256) streak;
@@ -32,6 +34,7 @@ contract Birdy is Ownable{
     event payoutChanged (uint256 payout);
     event uidRegistered (bytes32 indexed uid, address indexed breeder);
     event feederChanged (address feeder);
+    event minTimeChanged (uint256 minTime); 
 
     modifier onlyFeeder() {
         require(msg.sender == feeder);
@@ -46,6 +49,7 @@ contract Birdy is Ownable{
     function Birdy() {
         feeder = msg.sender;
         payPerBird = 100 wei;
+        minTime = 60; 
     }
 
     // Donation
@@ -65,7 +69,7 @@ contract Birdy is Ownable{
         uint256 timeDiff = now - timeChanged;
         address newBreeder = uids[_uid];
 
-        require (timeDiff >= 3600);
+        require (timeDiff >= minTime);
         require (breeder != newBreeder);
         require (newBreeder != 0);
 
@@ -78,7 +82,7 @@ contract Birdy is Ownable{
         breederChanged(msg.sender);
     }
 
-    function iterateBirds(uint256 birds) public onlyOwner {
+    function iterateBirds(uint256 birds) public onlyFeeder {
         birdsSince += birds;
         birdsTotal += birds;
         birdsUpdated(birds);
@@ -95,19 +99,25 @@ contract Birdy is Ownable{
     }
 
     // Settings
+    function registerUID(bytes32 _uid, address _address) public {
+        require(uids[_uid] == address(0));
+        uids[_uid] = _address;
+        uidRegistered(_uid, _address);
+    }
+    
     function changePayout(uint256 _new) public onlyOwner {
         payPerBird = _new;
         payoutChanged(_new);
     }
 
-    function registerUID(bytes32 _uid, address _address) public onlyFeeder {
-        uids[_uid] = _address;
-        uidRegistered(_uid, _address);
-    }
-
     function changeFeeder(address _new) public onlyOwner {
         feeder = _new;
         feederChanged(_new);
+    }
+    
+    function changeMinTime(uint256 _minTime) public onlyOwner {
+        minTime = _minTime;
+        minTimeChanged(minTime);
     }
 }
 
